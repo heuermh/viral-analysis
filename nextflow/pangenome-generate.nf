@@ -49,13 +49,50 @@ process induceGraph {
   """
 }
 
-process buildGraph {
+(graphsToSort, graphsToVisualize) = graphs.into(2)
+
+process traversePaths {
+  tag { sample }
+  publishDir "$sample", mode: 'copy'
+  container "quay.io/biocontainers/dsh-bio:1.3.3--0"
+
+  input:
+    set sample, file(graph) from graphsToVisualize
+  output:
+    set sample, file("${sample}.withTraversals.gfa") into graphsWithTraversals
+
+  """
+  dsh-bio traverse-paths -i $graph | dsh-bio truncate-paths -o ${sample}.withTraversals.gfa
+  """
+}
+
+process vizGraph {
+  tag { sample }
+  publishDir "$sample", mode: 'copy'
+  container "ubuntu"
+
+  input:
+    set sample, file(graph) from graphsWithTraversals
+  output:
+    set sample, file("${sample}.forceDirected.svg"), file("${sample}.forceDirected.cys"), file("${sample}.hierarchical.svg"), file("${sample}.hierarchical.cys") into visualizations
+
+  """
+  touch ${sample}.forceDirected.svg ${sample}.forceDirected.cys ${sample}.hierarchical.svg ${sample}.hierarchical.cys
+  """
+  /*
+  """
+  run_cytoscape_assembly_viz.sh -i $graph -o ${sample}.forceDirected.svg ${sample}.forceDirected.cys ${sample}.hierarchical.svg ${sample}.hierarchical.cys
+  """
+  */
+}
+
+process buildSortedGraph {
   tag { sample }
   publishDir "$sample", mode: 'copy'
   container "quay.io/biocontainers/odgi:v0.3--py37h8b12597_0"
 
   input:
-    set sample, file(graph) from graphs
+    set sample, file(graph) from graphsToSort
   output:
     set sample, file("${sample}.odgi") into sortedGraphs
 
@@ -65,7 +102,7 @@ process buildGraph {
   """
 }
 
-process vizGraph {
+process vizSortedGraph {
   tag { sample }
   publishDir "$sample", mode: 'copy'
   container "quay.io/biocontainers/odgi:v0.3--py37h8b12597_0"
@@ -73,7 +110,7 @@ process vizGraph {
   input:
     set sample, file(sortedGraph) from sortedGraphs
   output:
-    set sample, file("${sample}.png") into visualizations
+    set sample, file("${sample}.png") into sortedVisualizations
 
   """
   odgi viz -i $sortedGraph -o ${sample}.png -x 50000 -y 500 -R -P 4 -R
